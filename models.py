@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
+from datetime import UTC, datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase
-from datetime import datetime
 
 
 class Base(DeclarativeBase):
@@ -14,8 +15,8 @@ class Feed(Base):
     title = Column(String(300))
     url = Column(String(500), unique=True, nullable=False)
     site_url = Column(String(500))
-    last_fetched = Column(DateTime, nullable=True)
-    added_at = Column(DateTime, default=datetime.utcnow)
+    last_fetched = Column(DateTime(timezone=True), nullable=True)
+    added_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
 class Article(Base):
@@ -27,7 +28,7 @@ class Article(Base):
     url = Column(String(500))
     summary = Column(Text)
     author = Column(String(200))
-    published = Column(DateTime)
+    published = Column(DateTime(timezone=True))
     is_read = Column(Boolean, default=False)
     is_starred = Column(Boolean, default=False)
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
