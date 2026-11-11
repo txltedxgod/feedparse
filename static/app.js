@@ -2,11 +2,26 @@ const $ = id => document.getElementById(id);
 let activeFeedId = null;
 let activeFilter = 'all';
 
+function stripHtml(html) {
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    return (doc.body && doc.body.textContent) || '';
+}
+
+function safeHref(url) {
+    try {
+        const parsed = new URL(url, window.location.origin);
+        return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed.href : '#';
+    } catch {
+        return '#';
+    }
+}
+
 async function api(url, opts = {}) {
     const res = await fetch(url, {
         headers: {'Content-Type': 'application/json'},
         ...opts
     });
+    if (!res.ok) throw new Error(res.statusText);
     return res.json();
 }
 
@@ -24,10 +39,20 @@ async function loadFeeds() {
     feeds.forEach(f => {
         const div = document.createElement('div');
         div.className = 'feed-item' + (activeFeedId === f.id ? ' active' : '');
-        div.innerHTML = `
-            <span>${f.title || f.url}</span>
-            <button class="remove" onclick="event.stopPropagation(); removeFeed(${f.id})">&times;</button>
-        `;
+
+        const label = document.createElement('span');
+        label.textContent = f.title || f.url;
+
+        const btn = document.createElement('button');
+        btn.className = 'remove';
+        btn.innerHTML = '&times;';
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            removeFeed(f.id);
+        };
+
+        div.appendChild(label);
+        div.appendChild(btn);
         div.onclick = () => { activeFeedId = f.id; loadFeeds(); loadArticles(); };
         list.appendChild(div);
     });
@@ -59,15 +84,29 @@ async function loadArticles() {
         const div = document.createElement('div');
         div.className = 'article-card' + (a.is_read ? ' read' : '');
         const date = a.published ? new Date(a.published).toLocaleDateString() : '';
-        const starIcon = a.is_starred ? '<span class="star">★</span> ' : '';
-        // strip html tags from summary
-        const cleanSummary = a.summary.replace(/<[^>]*>/g, '').substring(0, 200);
+        const cleanSummary = stripHtml(a.summary).substring(0, 200);
 
-        div.innerHTML = `
-            <h3>${starIcon}${a.title}</h3>
-            <div class="meta">${a.author || 'unknown'} · ${date}</div>
-            <div class="preview">${cleanSummary}</div>
-        `;
+        const h3 = document.createElement('h3');
+        if (a.is_starred) {
+            const star = document.createElement('span');
+            star.className = 'star';
+            star.textContent = '★';
+            h3.appendChild(star);
+            h3.appendChild(document.createTextNode(' '));
+        }
+        h3.appendChild(document.createTextNode(a.title || 'Untitled'));
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = `${a.author || 'unknown'} · ${date}`;
+
+        const preview = document.createElement('div');
+        preview.className = 'preview';
+        preview.textContent = cleanSummary;
+
+        div.appendChild(h3);
+        div.appendChild(meta);
+        div.appendChild(preview);
         div.onclick = () => openArticle(a);
         list.appendChild(div);
     });
@@ -77,7 +116,7 @@ function openArticle(a) {
     const reader = $('reader');
     reader.classList.remove('hidden');
 
-    $('openLink').href = a.url;
+    $('openLink').href = safeHref(a.url);
     $('starBtn').textContent = a.is_starred ? 'unstar' : 'star';
     $('starBtn').onclick = async () => {
         await api(`/api/articles/${a.id}?is_starred=${!a.is_starred}`, {method: 'PATCH'});
@@ -87,11 +126,21 @@ function openArticle(a) {
     };
 
     const date = a.published ? new Date(a.published).toLocaleString() : '';
-    $('readerContent').innerHTML = `
-        <h2>${a.title}</h2>
-        <div class="article-meta">${a.author || ''} · ${date}</div>
-        <div class="article-body">${a.summary}</div>
-    `;
+    const container = $('readerContent');
+    container.innerHTML = '';
+
+    const h2 = document.createElement('h2');
+    h2.textContent = a.title || 'Untitled';
+    const meta = document.createElement('div');
+    meta.className = 'article-meta';
+    meta.textContent = `${a.author || ''} · ${date}`;
+    const body = document.createElement('div');
+    body.className = 'article-body';
+    body.textContent = stripHtml(a.summary);
+
+    container.appendChild(h2);
+    container.appendChild(meta);
+    container.appendChild(body);
 
     // mark as read
     if (!a.is_read) {
